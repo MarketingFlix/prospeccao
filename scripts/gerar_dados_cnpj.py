@@ -30,8 +30,8 @@ from datetime import date
 
 csv.field_size_limit(10_000_000)
 
-MAX_BAIRRO = 300   # comércios por arquivo de bairro
-MAX_CIDADE = 500   # comércios no arquivo "cidade toda"
+MAX_BAIRRO = 150   # comércios por arquivo de bairro
+MAX_CIDADE = 300   # comércios no arquivo "cidade toda"
 TELEFONE_REPETIDO = 4  # o mesmo número em tantas empresas costuma ser do contador
 
 
@@ -76,6 +76,12 @@ def normalizar_telefone(ddd, numero):
     if len(d) == 12 and d[4] in '6789':  # celular antigo sem o 9
         d = d[:4] + '9' + d[4:]
     return d
+
+
+def email_proprio(email):
+    """E-mail da própria empresa; os de escritório de contabilidade ficam de fora."""
+    e = (email or '').strip().lower()
+    return '' if not e or re.search(r'contab|fiscal|escritorio|assessoria', e) else e
 
 
 def eh_celular(d):
@@ -144,7 +150,7 @@ def main():
             rua = ' '.join(x for x in (r[13], r[14]) if x.strip())
             endereco = ', '.join(x for x in (bonito(rua), r[15].strip() if r[15].strip() not in ('', 'S/N', 'SN') else '') if x)
             lojas.append([r[0], bonito(r[4]), cnae, r[19], r[20], bonito(r[17]), endereco, t1, t2 if t2 != t1 else None,
-                          (r[27] or '').strip().lower()])
+                          email_proprio(r[27])])
         print(f'  {os.path.basename(caminho)}: {len(lojas)} comércios com telefone até agora ({lidos} lidos)', flush=True)
 
     sem_nome = {l[0] for l in lojas if not l[1]}
@@ -153,7 +159,7 @@ def main():
     for caminho in arquivos(args.pasta, 'Empresas'):
         for r in ler_csv(caminho):
             if r and r[0] in sem_nome:
-                razao[r[0]] = bonito(re.sub(r'[\s\d.\-]+$', '', r[1]))  # MEI: tira o CPF do fim do nome
+                razao[r[0]] = bonito(re.sub(r'^[\d.\s]+|[\s\d.\-]+$', '', r[1]))  # MEI: tira o CNPJ do começo e o CPF do fim
     for l in lojas:
         if not l[1]:
             l[1] = razao.get(l[0], '')
@@ -165,7 +171,7 @@ def main():
         contador = repetidos[t1] >= TELEFONE_REPETIDO
         pontos = (4 if eh_celular(t1) else 2) - (4 if contador else 0)
         pontos += bool(t2) + bool(email) + bool(endereco) + bool(bairro)
-        loja = {'n': nome, 'g': grupo_da_cnae(cnae), 'c': cnae, 'e': endereco, 'w': t1, 'z': 1 if eh_celular(t1) else 0, 'p': pontos}
+        loja = {'n': nome, 'g': grupo_da_cnae(cnae), 'c': cnae, 'e': endereco, 'w': t1, 'p': pontos}
         if t2:
             loja['w2'] = t2
         if email:

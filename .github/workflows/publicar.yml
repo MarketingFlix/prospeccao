@@ -66,7 +66,7 @@ jobs:
             exit 1
           }
           rm -rf receita
-          echo "::notice::Tamanho dos dados: $(du -sh saida | cut -f1), $(find saida -type f | wc -l) arquivos"
+          echo "::notice::Tamanho dos dados: $(find saida -type f -printf '%s\n' | awk '{t+=$1} END {printf "%.0f MB", t/1e6}'), $(find saida -type f | wc -l) arquivos"
 
       - name: Guardar no branch "dados-receita"
         run: |

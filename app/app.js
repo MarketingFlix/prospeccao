@@ -157,7 +157,7 @@ async function buscar() {
     nome: l.n,
     tipo: cnaes[l.c] || '',
     end: [l.e, l.b != null ? cidadeAtual.bairros[l.b][0] : ''].filter(Boolean).join(' - '),
-    wa: l.w || null, zap: !!l.z, tel2: l.w2 || '', contador: !!l.x,
+    wa: l.w || null, zap: l.w?.length === 13 && l.w[4] === '9', tel2: l.w2 || '', contador: !!l.x,
     site: '', email: l.m || '', horario: '', social: '',
     pontos: l.p, status: 'pendente',
   }));
