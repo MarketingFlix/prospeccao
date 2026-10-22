@@ -1,0 +1,105 @@
+# Gera os dados de comércios do Brasil (todo mês) e publica o app no GitHub Pages.
+#
+# - Todo dia 3, ou manualmente em Actions > "Dados e publicação" > Run workflow: baixa o mapa do Brasil,
+#   gera um arquivo por cidade e guarda no branch "dados".
+# - A cada mudança no app (pasta app/): só republica o app com os dados já gerados.
+name: Dados e publicação
+
+on:
+  schedule:
+    - cron: '0 6 3 * *'
+  workflow_dispatch:
+    inputs:
+      gerar_dados:
+        description: 'Baixar o mapa e gerar os dados de novo (leva ~30 min)'
+        type: boolean
+        default: true
+  push:
+    branches: [main]
+    paths: ['app/**', '.github/workflows/publicar.yml']
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: publicar
+  cancel-in-progress: false
+
+jobs:
+  gerar-dados:
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.gerar_dados)
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Instalar ferramentas
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y osmium-tool
+          pip install osmium shapely
+
+      - name: Baixar o mapa do Brasil (OpenStreetMap / Geofabrik)
+        run: curl -L --fail --retry 5 --retry-delay 30 -o brasil.osm.pbf https://download.geofabrik.de/south-america/brazil-latest.osm.pbf
+
+      - name: Separar comércios e bairros
+        run: |
+          osmium tags-filter brasil.osm.pbf \
+            nwr/shop nwr/craft \
+            nwr/amenity=pharmacy,restaurant,cafe,fast_food,bar,pub,ice_cream \
+            nwr/place=suburb,neighbourhood,quarter \
+            r/admin_level=9,10 \
+            -o filtrado.osm.pbf
+          rm brasil.osm.pbf
+          ls -lh filtrado.osm.pbf
+
+      - name: Gerar um arquivo por cidade
+        run: python scripts/gerar_dados.py filtrado.osm.pbf saida --cache cache-ibge
+
+      - name: Guardar no branch "dados"
+        run: |
+          cd saida
+          git init -q
+          git checkout -q -b dados
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -q -m "Dados do mapa de $(date +%Y-%m-%d)"
+          git push -q --force "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" dados
+
+  publicar:
+    needs: gerar-dados
+    if: ${{ !cancelled() && needs.gerar-dados.result != 'failure' }}
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/checkout@v4
+        continue-on-error: true  # na primeira publicação o branch "dados" ainda pode não existir
+        with:
+          ref: dados
+          path: dados-branch
+
+      - name: Montar o site (app + dados)
+        run: |
+          mkdir site
+          cp -r app/. site/
+          mkdir -p site/dados dados-branch
+          rsync -a --exclude .git dados-branch/ site/dados/
+          du -sh site
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@v4

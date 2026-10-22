@@ -1,0 +1,5 @@
+*.osm.pbf
+saida/
+cache-ibge/
+site/
+__pycache__/
