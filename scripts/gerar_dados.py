@@ -166,13 +166,13 @@ def baixar_json(url, cache_dir, nome):
     if os.path.exists(caminho):
         with open(caminho, encoding='utf-8') as f:
             return json.load(f)
-    for tentativa in range(5):
+    for tentativa in range(3):
         try:
-            with urllib.request.urlopen(url, timeout=120) as r:
+            with urllib.request.urlopen(url, timeout=30) as r:
                 dados = json.loads(r.read().decode('utf-8'))
             break
         except Exception as e:
-            if tentativa == 4:
+            if tentativa == 2:
                 raise
             print(f'  falha ao baixar {nome} ({e}), tentando de novo...', file=sys.stderr)
             time.sleep(5 * (tentativa + 1))
@@ -185,8 +185,11 @@ def carregar_municipios(cache_dir, ufs, municipios_osm):
     """Contornos das cidades: malha oficial do IBGE; se não baixar, usa os limites do próprio mapa."""
     os.makedirs(cache_dir, exist_ok=True)
     municipios = []  # (codigo, uf, nome, geometria)
+    ibge_fora = False  # se o IBGE não respondeu uma vez, não insiste nas outras UFs
     for uf in ufs:
         try:
+            if ibge_fora:
+                raise RuntimeError('IBGE fora do ar nesta execução')
             nomes = {str(m['id']): m['nome'] for m in baixar_json(IBGE_MUNICIPIOS.format(uf=uf), cache_dir, f'municipios-{uf}.json')}
             malha = baixar_json(IBGE_MALHA.format(codigo=CODIGOS_UF[uf]), cache_dir, f'malha-{uf}.json')
             antes = len(municipios)
@@ -195,6 +198,7 @@ def carregar_municipios(cache_dir, ufs, municipios_osm):
                 municipios.append((codigo, uf, nomes.get(codigo, codigo), shape(f['geometry'])))
             print(f'  {uf}: {len(municipios) - antes} cidades (IBGE)', flush=True)
         except Exception as e:
+            ibge_fora = True
             do_mapa = [(c, uf, n, g) for c, (n, g) in municipios_osm.items() if UF_POR_CODIGO.get(c[:2]) == uf]
             municipios.extend(do_mapa)
             print(f'::warning::{uf}: malha do IBGE indisponível ({e}); usando {len(do_mapa)} cidades do próprio mapa', flush=True)
