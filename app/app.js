@@ -1,24 +1,23 @@
-// Prospecção PVA: busca comércios (dados do OpenStreetMap, gerados todo mês por scripts/gerar_dados.py),
+// Prospecção PVA: busca comércios (base aberta de CNPJ da Receita Federal, gerada todo mês por
+// scripts/gerar_dados_cnpj.py),
 // monta listas e envia mensagens pelo WhatsApp.
 // Tudo roda no navegador do celular; os dados ficam salvos só no aparelho (localStorage).
 
-const IBGE_MUNICIPIOS = uf => `https://servicodados.ibge.gov.br/api/v1/localidades/estados/${uf}/municipios`;
-const DADOS = 'dados'; // pasta publicada junto com o app: dados/indice.json e dados/<UF>/<código IBGE>.json
+// Pasta publicada junto com o app: dados/indice.json, dados/cnaes.json, dados/<UF>/cidades.json
+// e dados/<UF>/<cidade>/{bairros.json, todos.json, <número do bairro>.json}.
+const DADOS = 'dados';
 
-// Tipos de comércio a partir da etiqueta do mapa. As de venda vêm marcadas; alimentação e serviços ficam opcionais.
-const SERVICOS = 'hairdresser|beauty|massage|tattoo|car_repair|laundry|dry_cleaning|funeral_directors|travel_agency|tailor|copyshop|money_lender|pawnbroker|rental|vacant';
-const valor = lista => { const re = new RegExp(`^(${lista})$`); return v => !!v && re.test(v); };
-const ehServico = valor(SERVICOS);
+// Grupos de comércio (o script de dados já marca cada um pela atividade do CNPJ). Os de venda vêm marcados.
 const CATEGORIAS = [
-  { id: 'mercado', rotulo: 'Mercados e padarias', marcada: true, aceita: t => valor('supermarket|convenience|bakery|butcher|greengrocer|deli|beverages|alcohol|confectionery|pastry|seafood|frozen_food|wholesale')(t.shop) },
-  { id: 'moda', rotulo: 'Roupas e calçados', marcada: true, aceita: t => valor('clothes|shoes|boutique|jewelry|bag|fashion_accessories|watches|fabric')(t.shop) },
-  { id: 'casa', rotulo: 'Casa e construção', marcada: true, aceita: t => valor('hardware|doityourself|furniture|paint|houseware|interior_decoration|electrical|appliance|bathroom_furnishing|kitchen|lighting|flooring|garden_centre|trade|glaziery')(t.shop) },
-  { id: 'eletro', rotulo: 'Celulares e eletrônicos', marcada: true, aceita: t => valor('mobile_phone|electronics|computer|hifi')(t.shop) },
-  { id: 'farmacia', rotulo: 'Farmácias e cosméticos', marcada: true, aceita: t => t.amenity === 'pharmacy' || valor('chemist|cosmetics|perfumery|optician|medical_supply')(t.shop) },
-  { id: 'auto', rotulo: 'Autopeças e motos', marcada: true, aceita: t => valor('car_parts|tyres|motorcycle|bicycle|car')(t.shop) },
-  { id: 'outras', rotulo: 'Outras lojas', marcada: true, aceita: t => !!t.shop && !ehServico(t.shop) },
-  { id: 'alimentacao', rotulo: 'Bares e restaurantes', marcada: false, aceita: t => valor('restaurant|cafe|fast_food|bar|pub|ice_cream')(t.amenity) },
-  { id: 'servicos', rotulo: 'Serviços e beleza', marcada: false, aceita: t => ehServico(t.shop) || !!t.craft },
+  { id: 'mercado', rotulo: 'Mercados e padarias', marcada: true },
+  { id: 'moda', rotulo: 'Roupas e calçados', marcada: true },
+  { id: 'casa', rotulo: 'Casa e construção', marcada: true },
+  { id: 'eletro', rotulo: 'Celulares e eletrônicos', marcada: true },
+  { id: 'farmacia', rotulo: 'Farmácias e cosméticos', marcada: true },
+  { id: 'auto', rotulo: 'Autopeças e motos', marcada: true },
+  { id: 'outras', rotulo: 'Outras lojas', marcada: true },
+  { id: 'alimentacao', rotulo: 'Bares e restaurantes', marcada: false },
+  { id: 'servicos', rotulo: 'Serviços e beleza', marcada: false },
 ];
 
 const UFS = {
@@ -71,31 +70,27 @@ function formatarTelefone(d) {
   return `(${ddd}) ${n.slice(0, n.length - 4)}-${n.slice(-4)}`;
 }
 
-const TIPOS = {
-  restaurant: 'restaurante', cafe: 'café', fast_food: 'lanchonete', bar: 'bar', pub: 'bar', ice_cream: 'sorveteria',
-  supermarket: 'supermercado', convenience: 'conveniência', bakery: 'padaria', butcher: 'açougue', greengrocer: 'hortifruti',
-  beverages: 'bebidas', alcohol: 'bebidas', confectionery: 'doceria', pastry: 'confeitaria', hairdresser: 'salão',
-  beauty: 'estética', cosmetics: 'cosméticos', pharmacy: 'farmácia', chemist: 'drogaria', clinic: 'clínica',
-  dentist: 'dentista', doctors: 'consultório', veterinary: 'veterinário', optician: 'ótica', clothes: 'roupas',
-  shoes: 'calçados', mobile_phone: 'celulares', electronics: 'eletrônicos', hardware: 'ferragens', pet: 'pet shop',
-  florist: 'floricultura', variety_store: 'variedades', car_repair: 'oficina', car_wash: 'lava-jato', fuel: 'posto',
-  furniture: 'móveis', jewelry: 'joalheria', stationery: 'papelaria', books: 'livraria', gift: 'presentes', kiosk: 'banca',
-};
-const tipoLegivel = t => TIPOS[t] || String(t).replace(/_/g, ' ');
-
 // ---------- dados da cidade ----------
-let indice = null;       // { gerado, cidades: { código: quantidade } }
-let cidadeAtual = null;  // conteúdo de dados/<UF>/<código>.json
+let indice = null;       // { gerado, fonte, ufs: { UF: quantidade } }
+let cnaes = {};          // código da atividade -> tipo legível
+let cidadeAtual = null;  // dados/<UF>/<cidade>/bairros.json + { codigo }
+
+async function lerJson(caminho, opcoes) {
+  const r = await fetch(`${DADOS}/${caminho}`, opcoes);
+  if (r.status === 404) throw new Error('vazio');
+  if (!r.ok) throw new Error(`erro ${r.status}`);
+  return r.json();
+}
 
 async function carregarIndice() {
   if (indice) return indice;
   try {
-    const r = await fetch(`${DADOS}/indice.json`, { cache: 'no-cache' });
-    indice = r.ok ? await r.json() : { cidades: {} };
+    indice = await lerJson('indice.json', { cache: 'no-cache' });
+    cnaes = await lerJson('cnaes.json').catch(() => ({}));
   } catch {
-    indice = { cidades: {} };
+    indice = { ufs: {} };
   }
-  if (indice.gerado) $('#data-dados').textContent = `Dados do mapa de ${new Date(indice.gerado + 'T12:00').toLocaleDateString('pt-BR')}.`;
+  if (indice.gerado) $('#data-dados').textContent = `Dados de ${new Date(indice.gerado + 'T12:00').toLocaleDateString('pt-BR')}.`;
   return indice;
 }
 
@@ -106,66 +101,64 @@ async function carregarCidade() {
   sel.disabled = true;
   cidadeAtual = null;
   if (!uf || !codigo) { aviso.textContent = ''; return; }
-  aviso.textContent = 'Carregando comércios da cidade...';
+  aviso.textContent = 'Carregando bairros...';
   try {
-    const r = await fetch(`${DADOS}/${uf}/${codigo}.json`);
-    if (r.status === 404) throw new Error('vazio');
-    if (!r.ok) throw new Error(`erro ${r.status}`);
-    const dados = await r.json();
+    const dados = await lerJson(`${uf}/${codigo}/bairros.json`);
     if ($('#cidade').value !== codigo) return; // trocou de cidade enquanto carregava
     cidadeAtual = { ...dados, codigo };
   } catch (e) {
     if ($('#cidade').value !== codigo) return;
     aviso.textContent = e.message === 'vazio'
-      ? 'O mapa ainda não tem comércios cadastrados nesta cidade.'
+      ? 'Ainda não há comércios com telefone nesta cidade.'
       : 'Não consegui carregar os dados da cidade. Verifique a internet e escolha a cidade de novo.';
     return;
   }
-  const porBairro = new Map();
-  for (const l of cidadeAtual.lojas) if (l.b != null) porBairro.set(l.b, (porBairro.get(l.b) || 0) + 1);
   sel.innerHTML = '<option value="">Cidade toda</option>' + cidadeAtual.bairros
-    .map((nome, i) => [nome, i])
-    .filter(([, i]) => porBairro.has(i))
-    .map(([nome, i]) => `<option value="${i}">${esc(nome)} (${porBairro.get(i)})</option>`).join('');
+    .map(([nome, qtd], i) => `<option value="${i}">${esc(nome)} (${qtd})</option>`).join('');
   sel.disabled = false;
-  aviso.textContent = `${cidadeAtual.lojas.length} comércios no mapa desta cidade, em ${porBairro.size} bairros.`;
+  aviso.textContent = `${cidadeAtual.total} comércios com telefone nesta cidade, em ${cidadeAtual.bairros.length} bairros.`;
   const ultima = db.ler('pva.ultimaBusca', {});
   if (ultima.cidade === codigo && ultima.bairro) {
-    const i = cidadeAtual.bairros.indexOf(ultima.bairro);
-    if (i >= 0 && porBairro.has(i)) sel.value = String(i);
+    const i = cidadeAtual.bairros.findIndex(([nome]) => nome === ultima.bairro);
+    if (i >= 0) sel.value = String(i);
   }
 }
 
 // ---------- busca ----------
-function buscar() {
+async function buscar() {
   const uf = $('#uf').value;
   const codigo = $('#cidade').value;
   const escolhaBairro = $('#bairro').value;
   const quantidade = Number($('#quantidade').value);
-  const escolhidas = CATEGORIAS.filter(c => $(`#cat-${c.id}`).checked);
+  const escolhidas = new Set(CATEGORIAS.filter(c => $(`#cat-${c.id}`).checked).map(c => c.id));
   const status = $('#status-busca');
   status.classList.remove('erro');
   const erro = msg => { status.textContent = msg; status.classList.add('erro'); };
   if (!uf || !codigo) return erro('Escolha a UF e a cidade.');
   if (!cidadeAtual || cidadeAtual.codigo !== codigo) return erro('Aguarde carregar os dados da cidade.');
-  if (!escolhidas.length) return erro('Escolha pelo menos um tipo de comércio.');
+  if (!escolhidas.size) return erro('Escolha pelo menos um tipo de comércio.');
 
   const cidade = cidadeAtual.cidade;
   const bairroIdx = escolhaBairro === '' ? null : Number(escolhaBairro);
-  const bairro = bairroIdx == null ? '' : cidadeAtual.bairros[bairroIdx];
+  const bairro = bairroIdx == null ? '' : cidadeAtual.bairros[bairroIdx][0];
   db.gravar('pva.ultimaBusca', { uf, cidade: codigo, bairro, quantidade });
 
+  status.textContent = 'Buscando...';
+  let lojas;
+  try {
+    lojas = await lerJson(`${uf}/${codigo}/${bairroIdx == null ? 'todos' : bairroIdx}.json`);
+  } catch {
+    return erro('Não consegui carregar os comércios. Verifique a internet e tente de novo.');
+  }
   // O arquivo já vem ordenado pelo ranking (dados mais completos primeiro).
-  const encontrados = cidadeAtual.lojas
-    .map((l, i) => ({ l, i }))
-    .filter(({ l }) => (bairroIdx == null || l.b === bairroIdx) && escolhidas.some(c => c.aceita({ [l.k]: l.v })));
-  const selecionados = encontrados.slice(0, quantidade).map(({ l, i }) => ({
-    id: `${codigo}-${i}`,
+  const encontrados = lojas.filter(l => escolhidas.has(l.g));
+  const selecionados = encontrados.slice(0, quantidade).map((l, n) => ({
+    id: `${codigo}-${bairroIdx ?? 't'}-${n}`,
     nome: l.n,
-    tipo: tipoLegivel(l.v),
-    end: [l.e, l.b != null ? cidadeAtual.bairros[l.b] : ''].filter(Boolean).join(' - '),
-    wa: l.w || null, zap: !!l.z,
-    site: l.s || '', email: l.m || '', horario: l.h || '', social: l.r || '',
+    tipo: cnaes[l.c] || '',
+    end: [l.e, l.b != null ? cidadeAtual.bairros[l.b][0] : ''].filter(Boolean).join(' - '),
+    wa: l.w || null, zap: !!l.z, tel2: l.w2 || '', contador: !!l.x,
+    site: '', email: l.m || '', horario: '', social: '',
     pontos: l.p, status: 'pendente',
   }));
   if (!selecionados.length) return erro('Nenhum comércio encontrado com esses filtros. Tente outro bairro ou mais tipos de comércio.');
@@ -176,8 +169,8 @@ function buscar() {
   listaAtualId = lista.id;
   salvarListas();
   db.gravar('pva.listaAtual', listaAtualId);
-  const comTel = selecionados.filter(i => i.wa).length;
-  status.textContent = `${encontrados.length} comércios encontrados; lista "${lista.nome}" criada com ${selecionados.length} (${comTel} com telefone).`;
+  const celulares = selecionados.filter(i => i.zap).length;
+  status.textContent = `Lista "${lista.nome}" criada com ${selecionados.length} comércios (${celulares} com celular).`;
   mostrarAba('listas');
 }
 
@@ -292,7 +285,8 @@ function desenharLista() {
       return `<li>
         <div class="item-nome">${esc(i.nome)}${selo}</div>
         <div class="item-info">${esc([i.tipo, i.end].filter(Boolean).join(' · '))}</div>
-        <div class="item-tel">${i.wa ? esc(formatarTelefone(i.wa)) : '<span class="item-info">sem telefone no mapa</span>'}</div>
+        <div class="item-tel">${i.wa ? esc(formatarTelefone(i.wa)) : '<span class="item-info">sem telefone no mapa</span>'}${i.tel2 ? `<span class="item-info"> · outro: ${esc(formatarTelefone(i.tel2))}</span>` : ''}</div>
+        ${i.contador ? '<div class="item-info">este número aparece em várias empresas, pode ser do contador</div>' : ''}
         ${i.site || i.email || i.horario || i.social ? `<div class="item-info">também tem: ${[i.site && 'site', i.email && 'e-mail', i.horario && 'horário', i.social && 'rede social'].filter(Boolean).join(', ')}</div>` : ''}
         <div class="item-acoes">${botoes.join('')}</div>
       </li>`;
@@ -378,29 +372,26 @@ function mostrarAba(aba) {
   window.scrollTo(0, 0);
 }
 
-// Cidades da UF (lista oficial do IBGE, mesmos códigos dos arquivos de dados), com a quantidade de comércios no mapa.
+// Cidades da UF que têm comércios na base, com a quantidade de cada uma.
 async function carregarCidades(uf, selecionar) {
   const sel = $('#cidade');
   sel.innerHTML = '<option value="">Escolha a cidade</option>';
   sel.disabled = true;
   carregarCidade();
   if (!uf) return;
-  let cidades = db.ler(`pva.municipios.${uf}`, null);
-  if (!cidades) {
-    try {
-      const r = await fetch(IBGE_MUNICIPIOS(uf));
-      cidades = (await r.json()).map(m => ({ id: String(m.id), nome: m.nome })).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
-      db.gravar(`pva.municipios.${uf}`, cidades);
-    } catch {
-      $('#aviso-bairros').textContent = 'Não consegui carregar as cidades. Verifique a internet e escolha a UF de novo.';
-      return;
-    }
+  let cidades;
+  try {
+    cidades = await lerJson(`${uf}/cidades.json`);
+  } catch (e) {
+    $('#aviso-bairros').textContent = e.message === 'vazio'
+      ? 'Ainda não há comércios desta UF na base.'
+      : 'Não consegui carregar as cidades. Verifique a internet e escolha a UF de novo.';
+    return;
   }
-  const { cidades: qtd } = await carregarIndice();
   if ($('#uf').value !== uf) return;
-  sel.innerHTML += cidades.map(c => `<option value="${c.id}">${esc(c.nome)}${qtd[c.id] ? ` (${qtd[c.id]})` : ' (sem dados)'}</option>`).join('');
+  sel.innerHTML += cidades.map(([id, nome, qtd]) => `<option value="${id}">${esc(nome)} (${qtd})</option>`).join('');
   sel.disabled = false;
-  if (selecionar && cidades.some(c => c.id === selecionar)) { sel.value = selecionar; carregarCidade(); }
+  if (selecionar && cidades.some(([id]) => id === selecionar)) { sel.value = selecionar; carregarCidade(); }
 }
 
 function iniciar() {

@@ -1,6 +1,6 @@
 // Service worker mínimo: permite instalar o app e abrir a tela sem internet.
 // Usa "rede primeiro" para que atualizações publicadas cheguem na hora.
-const CACHE = 'pva-v7';
+const CACHE = 'pva-v8';
 const ARQUIVOS = ['./', 'index.html', 'style.css', 'app.js', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {
