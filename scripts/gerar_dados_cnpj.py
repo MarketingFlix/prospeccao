@@ -30,8 +30,8 @@ from datetime import date
 
 csv.field_size_limit(10_000_000)
 
-MAX_BAIRRO = 150   # comércios por arquivo de bairro
-MAX_CIDADE = 300   # comércios no arquivo "cidade toda"
+MAX_BAIRRO = 80    # comércios por arquivo de bairro
+MAX_CIDADE = 150   # comércios no arquivo "cidade toda"
 TELEFONE_REPETIDO = 4  # o mesmo número em tantas empresas costuma ser do contador
 
 
