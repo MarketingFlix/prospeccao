@@ -24,9 +24,13 @@ from shapely import wkb
 from shapely.geometry import Point, shape
 from shapely.strtree import STRtree
 
-UFS = ['AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA',
-       'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO']
-IBGE_MALHA = ('https://servicodados.ibge.gov.br/api/v3/malhas/estados/{uf}'
+# Sigla -> código IBGE da UF (os 2 primeiros dígitos do código de cada município).
+CODIGOS_UF = {'RO': 11, 'AC': 12, 'AM': 13, 'RR': 14, 'PA': 15, 'AP': 16, 'TO': 17, 'MA': 21, 'PI': 22,
+              'CE': 23, 'RN': 24, 'PB': 25, 'PE': 26, 'AL': 27, 'SE': 28, 'BA': 29, 'MG': 31, 'ES': 32,
+              'RJ': 33, 'SP': 35, 'PR': 41, 'SC': 42, 'RS': 43, 'MS': 50, 'MT': 51, 'GO': 52, 'DF': 53}
+UFS = list(CODIGOS_UF)
+UF_POR_CODIGO = {str(v): k for k, v in CODIGOS_UF.items()}
+IBGE_MALHA = ('https://servicodados.ibge.gov.br/api/v3/malhas/estados/{codigo}'
               '?formato=application/vnd.geo%2Bjson&intrarregiao=municipio&qualidade=intermediaria')
 IBGE_MUNICIPIOS = 'https://servicodados.ibge.gov.br/api/v1/localidades/estados/{uf}/municipios'
 
@@ -107,6 +111,7 @@ class Coletor(osmium.SimpleHandler):
         self.lojas = []            # (loja, lon, lat, addr:suburb)
         self.bairros_area = []     # (nome, polígono)
         self.bairros_ponto = []    # (nome, lon, lat)
+        self.municipios_osm = {}   # código IBGE -> (nome, polígono), plano B se a malha do IBGE não baixar
         self.fabrica = osmium.geom.WKBFactory()
 
     def node(self, n):
@@ -134,6 +139,15 @@ class Coletor(osmium.SimpleHandler):
         t = dict(a.tags)
         nome = t.get('name')
         if not nome:
+            return
+        codigo = re.sub(r'\D', '', t.get('IBGE:GEOCODIGO', ''))
+        if t.get('boundary') == 'administrative' and t.get('admin_level') == '8' and len(codigo) == 7:
+            try:
+                poli = wkb.loads(self.fabrica.create_multipolygon(a), hex=True)
+                if not poli.is_empty:
+                    self.municipios_osm[codigo] = (nome, poli if poli.is_valid else poli.buffer(0))
+            except Exception:
+                pass
             return
         eh_bairro = (t.get('boundary') == 'administrative' and t.get('admin_level') in ('9', '10')) or t.get('place') in LUGARES_BAIRRO
         if not eh_bairro:
@@ -167,15 +181,23 @@ def baixar_json(url, cache_dir, nome):
     return dados
 
 
-def carregar_municipios(cache_dir, ufs):
+def carregar_municipios(cache_dir, ufs, municipios_osm):
+    """Contornos das cidades: malha oficial do IBGE; se não baixar, usa os limites do próprio mapa."""
     os.makedirs(cache_dir, exist_ok=True)
     municipios = []  # (codigo, uf, nome, geometria)
     for uf in ufs:
-        nomes = {str(m['id']): m['nome'] for m in baixar_json(IBGE_MUNICIPIOS.format(uf=uf), cache_dir, f'municipios-{uf}.json')}
-        malha = baixar_json(IBGE_MALHA.format(uf=uf), cache_dir, f'malha-{uf}.json')
-        for f in malha['features']:
-            codigo = str(f['properties']['codarea'])
-            municipios.append((codigo, uf, nomes.get(codigo, codigo), shape(f['geometry'])))
+        try:
+            nomes = {str(m['id']): m['nome'] for m in baixar_json(IBGE_MUNICIPIOS.format(uf=uf), cache_dir, f'municipios-{uf}.json')}
+            malha = baixar_json(IBGE_MALHA.format(codigo=CODIGOS_UF[uf]), cache_dir, f'malha-{uf}.json')
+            antes = len(municipios)
+            for f in malha['features']:
+                codigo = str(f['properties']['codarea'])
+                municipios.append((codigo, uf, nomes.get(codigo, codigo), shape(f['geometry'])))
+            print(f'  {uf}: {len(municipios) - antes} cidades (IBGE)', flush=True)
+        except Exception as e:
+            do_mapa = [(c, uf, n, g) for c, (n, g) in municipios_osm.items() if UF_POR_CODIGO.get(c[:2]) == uf]
+            municipios.extend(do_mapa)
+            print(f'::warning::{uf}: malha do IBGE indisponível ({e}); usando {len(do_mapa)} cidades do próprio mapa', flush=True)
     return municipios
 
 
@@ -191,10 +213,11 @@ def main():
     print('Lendo o mapa...', flush=True)
     col = Coletor()
     col.apply_file(args.pbf, locations=True, idx='flex_mem')
-    print(f'  {len(col.lojas)} comércios, {len(col.bairros_area)} contornos de bairro, {len(col.bairros_ponto)} pontos de bairro', flush=True)
+    print(f'  {len(col.lojas)} comércios, {len(col.bairros_area)} contornos de bairro, {len(col.bairros_ponto)} pontos de bairro, '
+          f'{len(col.municipios_osm)} cidades no mapa', flush=True)
 
     print('Carregando cidades do IBGE...', flush=True)
-    municipios = carregar_municipios(args.cache, args.ufs.split(','))
+    municipios = carregar_municipios(args.cache, args.ufs.split(','), col.municipios_osm)
     arvore_mun = STRtree([m[3] for m in municipios])
     arvore_area = STRtree([b[1] for b in col.bairros_area]) if col.bairros_area else None
     arvore_ponto = STRtree([Point(b[1], b[2]) for b in col.bairros_ponto]) if col.bairros_ponto else None
@@ -207,7 +230,7 @@ def main():
         if not idx:
             sem_cidade += 1
             continue
-        codigo = municipios[idx[0]][0]
+        codigo = municipios[int(idx[0])][0]
         bairro = None
         if arvore_area is not None:
             dentro = [col.bairros_area[i] for i in arvore_area.query(p, predicate='intersects')]
@@ -241,9 +264,11 @@ def main():
             json.dump({'cidade': nome, 'uf': uf, 'gerado': gerado, 'bairros': bairros, 'lojas': lojas},
                       f, ensure_ascii=False, separators=(',', ':'))
         indice['cidades'][codigo] = len(lojas)
+    os.makedirs(args.saida, exist_ok=True)
     with open(os.path.join(args.saida, 'indice.json'), 'w', encoding='utf-8') as f:
         json.dump(indice, f, separators=(',', ':'))
-    print(f'Pronto: {len(por_cidade)} cidades com comércios.', flush=True)
+    total = sum(indice['cidades'].values())
+    print(f'::notice::Pronto: {total} comércios em {len(por_cidade)} cidades ({sem_cidade} fora das cidades).', flush=True)
 
 
 if __name__ == '__main__':

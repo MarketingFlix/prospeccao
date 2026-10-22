@@ -54,13 +54,19 @@ jobs:
             nwr/shop nwr/craft \
             nwr/amenity=pharmacy,restaurant,cafe,fast_food,bar,pub,ice_cream \
             nwr/place=suburb,neighbourhood,quarter \
-            r/admin_level=9,10 \
+            r/admin_level=8,9,10 \
             -o filtrado.osm.pbf
           rm brasil.osm.pbf
           ls -lh filtrado.osm.pbf
 
       - name: Gerar um arquivo por cidade
-        run: python scripts/gerar_dados.py filtrado.osm.pbf saida --cache cache-ibge
+        run: |
+          set -o pipefail
+          # Em caso de erro, as últimas linhas do log viram um aviso visível na página da execução.
+          python -u scripts/gerar_dados.py filtrado.osm.pbf saida --cache cache-ibge 2>&1 | tee log.txt || {
+            echo "::error title=Falha ao gerar os dados::$(tail -n 30 log.txt | sed ':a;N;$!ba;s/%/%25/g;s/\r//g;s/\n/%0A/g')"
+            exit 1
+          }
 
       - name: Guardar no branch "dados"
         run: |
