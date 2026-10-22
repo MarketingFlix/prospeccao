@@ -1,0 +1,100 @@
+[hidden] { display: none !important; }
+:root {
+  --verde: #0b6e4f;
+  --verde-claro: #e6f4ee;
+  --texto: #1d1d1f;
+  --cinza: #6b6b70;
+  --borda: #d9d9de;
+  --fundo: #f6f6f8;
+  --perigo: #b42318;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: var(--texto);
+  background: var(--fundo);
+  font-size: 16px;
+}
+header {
+  position: sticky; top: 0; z-index: 5;
+  background: var(--verde); color: #fff;
+  padding: 12px 16px 0;
+}
+h1 { margin: 0 0 10px; font-size: 19px; }
+nav { display: flex; gap: 4px; }
+nav button {
+  flex: 1; background: transparent; color: #fff; opacity: .75;
+  border: 0; border-bottom: 3px solid transparent; padding: 10px 4px; font-size: 15px;
+}
+nav button.ativa { opacity: 1; border-bottom-color: #fff; font-weight: 600; }
+main { padding: 16px; max-width: 640px; margin: 0 auto; }
+label { display: block; font-weight: 600; margin: 12px 0 6px; }
+input[type=text], input:not([type]), textarea, select {
+  width: 100%; padding: 12px; font-size: 16px;
+  border: 1px solid var(--borda); border-radius: 10px; background: #fff; font-family: inherit;
+}
+button {
+  font-size: 15px; padding: 10px 14px; border-radius: 10px;
+  border: 1px solid var(--borda); background: #fff; color: var(--texto); cursor: pointer;
+}
+button.primario { background: var(--verde); color: #fff; border-color: var(--verde); font-weight: 600; width: 100%; padding: 14px; margin-top: 12px; }
+button.grande { font-size: 18px; padding: 16px; }
+button.perigo { color: var(--perigo); }
+button:disabled { opacity: .5; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chips label { margin: 0; font-weight: 400; }
+.chips input { display: none; }
+.chips span {
+  display: inline-block; padding: 8px 12px; border-radius: 999px;
+  border: 1px solid var(--borda); background: #fff; font-size: 14px;
+}
+.chips input:checked + span { background: var(--verde-claro); border-color: var(--verde); color: var(--verde); font-weight: 600; }
+.status { color: var(--cinza); min-height: 1.2em; white-space: pre-line; }
+.status.erro { color: var(--perigo); }
+.dica { color: var(--cinza); font-size: 14px; }
+.vazio { color: var(--cinza); text-align: center; padding: 32px 0; }
+.resumo { margin: 10px 0; color: var(--cinza); font-size: 14px; }
+.acoes { display: flex; gap: 8px; flex-wrap: wrap; }
+.acoes.secundarias { margin-top: 8px; }
+.acoes.secundarias button { flex: 1 1 auto; font-size: 14px; }
+.filtro { font-weight: 400; display: flex; align-items: center; gap: 8px; }
+#itens { list-style: none; padding: 0; margin: 8px 0 80px; }
+#itens li {
+  background: #fff; border: 1px solid var(--borda); border-radius: 12px;
+  padding: 12px; margin-bottom: 8px;
+}
+.item-nome { font-weight: 600; }
+.item-info { color: var(--cinza); font-size: 14px; margin-top: 2px; }
+.item-tel { margin-top: 4px; }
+.selo { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 999px; margin-left: 6px; vertical-align: middle; }
+.selo.enviado { background: var(--verde-claro); color: var(--verde); }
+.selo.nao { background: #fde8e7; color: var(--perigo); }
+.selo.zap { background: #e8f0fe; color: #1a56db; }
+.item-acoes { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.item-acoes button { font-size: 13px; padding: 7px 10px; }
+#sequencia {
+  position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 10;
+  display: flex; align-items: flex-end; justify-content: center;
+}
+#sequencia[hidden] { display: none; }
+.painel {
+  background: #fff; width: 100%; max-width: 640px;
+  border-radius: 18px 18px 0 0; padding: 20px 16px calc(20px + env(safe-area-inset-bottom));
+}
+.seq-progresso { font-weight: 600; }
+.barra { height: 6px; background: var(--fundo); border-radius: 3px; margin: 8px 0 14px; overflow: hidden; }
+.barra div { height: 100%; background: var(--verde); width: 0; transition: width .3s; }
+.seq-anterior { color: var(--verde); font-size: 14px; min-height: 1.2em; }
+.seq-proximo-rotulo { color: var(--cinza); font-size: 13px; margin-top: 10px; }
+.seq-nome { font-size: 20px; font-weight: 700; }
+.seq-tel { color: var(--cinza); }
+.painel .acoes { margin-top: 10px; }
+.painel .acoes button { flex: 1; }
+
+.linha-campos { display: flex; gap: 8px; }
+.campo-uf { flex: 0 0 96px; }
+.campo-cidade { flex: 1; }
+.opcional { font-weight: 400; color: var(--cinza); font-size: 13px; }
+#bairro-texto { margin-top: 8px; }
+select:disabled { color: var(--cinza); background: var(--fundo); }

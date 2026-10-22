@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Prospecção PVA</title>
+<meta name="theme-color" content="#0b6e4f">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>Prospecção PVA</h1>
+  <nav>
+    <button data-aba="buscar" class="ativa">Buscar</button>
+    <button data-aba="listas">Listas</button>
+    <button data-aba="mensagem">Mensagem</button>
+  </nav>
+</header>
+
+<main>
+  <!-- BUSCAR -->
+  <section id="aba-buscar">
+    <div class="linha-campos">
+      <label class="campo-uf">UF
+        <select id="uf"></select>
+      </label>
+      <label class="campo-cidade">Cidade
+        <select id="cidade" disabled><option value="">Escolha a UF</option></select>
+      </label>
+    </div>
+    <label>Bairro
+      <select id="bairro" disabled><option value="">Cidade toda</option></select>
+    </label>
+    <p id="aviso-bairros" class="dica"></p>
+    <label>Quantidade de locais
+      <select id="quantidade">
+        <option value="10">10</option>
+        <option value="20">20</option>
+        <option value="30" selected>30</option>
+      </select>
+    </label>
+    <label>Tipos de comércio</label>
+    <div id="categorias" class="chips"></div>
+    <button id="btn-buscar" class="primario">Buscar comércios</button>
+    <p id="status-busca" class="status"></p>
+    <p class="dica">Fonte: © colaboradores do OpenStreetMap, atualizado todo mês. <span id="data-dados"></span> A lista traz primeiro os comércios com dados mais completos (telefone, endereço, site, e-mail, horário). Comércios sem telefone podem ser completados pelo botão "Ver no Google Maps".</p>
+  </section>
+
+  <!-- LISTAS -->
+  <section id="aba-listas" hidden>
+    <div id="sem-listas" class="vazio">Nenhuma lista ainda. Faça uma busca.</div>
+    <select id="seletor-lista"></select>
+    <div id="resumo-lista" class="resumo"></div>
+    <div class="acoes">
+      <button id="btn-enviar-lista" class="primario">Enviar mensagem para lista</button>
+    </div>
+    <div class="acoes secundarias">
+      <button id="btn-vcf">Baixar contatos (.vcf)</button>
+      <button id="btn-csv">Baixar planilha (.csv)</button>
+      <button id="btn-excluir" class="perigo">Excluir lista</button>
+    </div>
+    <label class="filtro"><input type="checkbox" id="so-com-tel"> Mostrar só quem tem telefone</label>
+    <ul id="itens"></ul>
+  </section>
+
+  <!-- MENSAGEM -->
+  <section id="aba-mensagem" hidden>
+    <label>Mensagem padrão
+      <textarea id="mensagem" rows="7"></textarea>
+    </label>
+    <p class="dica">Use <b>{nome}</b> para inserir o nome do comércio. Apresente-se, diga de onde tirou o contato e ofereça a opção de não receber mais.</p>
+    <button id="btn-salvar-msg" class="primario">Salvar mensagem</button>
+    <p id="status-msg" class="status"></p>
+  </section>
+</main>
+
+<!-- PAINEL DO MODO SEQUÊNCIA -->
+<div id="sequencia" hidden>
+  <div class="painel">
+    <div id="seq-progresso" class="seq-progresso"></div>
+    <div class="barra"><div id="seq-barra"></div></div>
+    <div id="seq-anterior" class="seq-anterior"></div>
+    <div class="seq-proximo-rotulo">Próximo:</div>
+    <div id="seq-nome" class="seq-nome"></div>
+    <div id="seq-tel" class="seq-tel"></div>
+    <button id="seq-abrir" class="primario grande">Abrir no WhatsApp</button>
+    <div class="acoes">
+      <button id="seq-pular">Pular</button>
+      <button id="seq-pausar">Pausar</button>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
